@@ -60,18 +60,21 @@ if __name__ =='__main__':
 
 	alpha = 1
 	beta = 0.1
+	opt = "LBFGS" #[Adam , LBFGS]
 
 	model = VGG().eval()
-	# optimizer = optim.Adam([generated],lr=learning_rate)
-	optimizer = optim.LBFGS([generated],lr=learning_rate)
+	if opt=='Adam':
+		optimizer = optim.Adam([generated],lr=learning_rate)
+	else:
+		optimizer = optim.LBFGS([generated],lr=learning_rate)
 
 	for step in tqdm(range(total_steps)):
-		generated_features = model(generated)
-		original_image_features = model(original_img)
-		style_features = model(style_img)
-		# print(generated_features[0]) 
-		#LBFGS
-		def closure():
+
+
+		if opt=='Adam':
+			generated_features = model(generated)
+			original_image_features = model(original_img)
+			style_features = model(style_img)
 			style_loss , original_loss = 0,0
 
 			for gen_f,orig_f, style_f in zip(generated_features,original_image_features,style_features):
@@ -88,12 +91,36 @@ if __name__ =='__main__':
 
 			optimizer.zero_grad()
 			total_loss.backward()
+			optimizer.step()
 
-			return total_loss
+		else:
+			#LBFGS
+			def closure():
+				generated_features = model(generated)
+				original_image_features = model(original_img)
+				style_features = model(style_img)
+				style_loss , original_loss = 0,0
 
-		optimizer.step(closure)
+				for gen_f,orig_f, style_f in zip(generated_features,original_image_features,style_features):
 
-		if step % 200 ==0 :
-			save_image(generated,f'generated_{step}.png')
+					batch_size,channel,height,width = gen_f.shape
+					#Original-Loss
+					original_loss += torch.mean((gen_f - orig_f) ** 2)
+					#Style-Loss
+					G = gen_f.view(channel,height*width).mm(gen_f.view(channel,height*width).t())
+					A = style_f.view(channel,height*width).mm(style_f.view(channel,height * width).t())
+					style_loss += torch.mean((G - A)**2)
+
+				total_loss = alpha * original_loss  + beta * style_loss
+
+				optimizer.zero_grad()
+				total_loss.backward()
+
+				return total_loss
+
+			optimizer.step(closure)
+
+		if step % 10 ==0 :
+			save_image(generated,f'generated_adam{step}.png')
 
 
